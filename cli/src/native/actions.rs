@@ -5281,6 +5281,7 @@ async fn handle_requests(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
         return Ok(json!({ "tracking": true }));
     } else if cmd.get("close").and_then(|v| v.as_bool()).unwrap_or(false) {
         state.request_tracking = false;
+        state.tracked_requests.clear();
         if let Some(ref mgr) = state.browser {
             if let Ok(session_id) = mgr.active_session_id() {
                 let _ = mgr
