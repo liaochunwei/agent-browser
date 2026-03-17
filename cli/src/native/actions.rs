@@ -61,12 +61,20 @@ pub struct RouteResponse {
 
 #[derive(Clone, serde::Serialize)]
 pub struct TrackedRequest {
+    pub request_id: String,
     pub url: String,
     pub method: String,
     pub headers: Value,
     pub timestamp: u64,
     #[serde(rename = "resourceType")]
     pub resource_type: String,
+    pub response: Option<TrackedResponse>,
+}
+#[derive(Clone, serde::Serialize)]
+pub struct TrackedResponse {
+    pub status: i64,
+    #[serde(rename = "contentType")]
+    pub content_type:  String,
 }
 
 pub struct FetchPausedRequest {
@@ -343,7 +351,7 @@ impl DaemonState {
                                         url: url.clone(),
                                         status: None,
                                         mime_type: None,
-                                        request_id,
+                                        request_id:request_id.clone(),
                                     });
                                 }
                                 if self.request_tracking {
@@ -360,16 +368,18 @@ impl DaemonState {
                                         .map(|d| d.as_millis() as u64)
                                         .unwrap_or(0);
                                     self.tracked_requests.push(TrackedRequest {
+                                        request_id,
                                         url,
                                         method,
                                         headers,
                                         timestamp,
                                         resource_type,
+                                        response: None
                                     });
                                 }
                             }
                         }
-                        "Network.responseReceived" if self.har_recording => {
+                        "Network.responseReceived" if self.har_recording|| self.request_tracking => {
                             if let Some(response) = event.params.get("response") {
                                 let request_id = event
                                     .params
@@ -385,10 +395,36 @@ impl DaemonState {
                                     .har_entries
                                     .iter_mut()
                                     .rev()
-                                    .find(|e| e.request_id == request_id)
+                                    .find(|e| e.request_id == request_id.clone())
                                 {
                                     entry.status = status;
                                     entry.mime_type = mime_type;
+                                }
+
+                                let response = event.params.get("response");
+                                let status = response
+                                    .and_then(|r| r.get("status"))
+                                    .and_then(|v| v.as_i64())
+                                    .unwrap_or(0);
+                                let headers = response
+                                    .and_then(|r| r.get("headers"))
+                                    .cloned()
+                                    .unwrap_or(json!({}));
+
+                                if let Some(entry) = self
+                                    .tracked_requests
+                                    .iter_mut()
+                                    .rev()
+                                    .find(|e| e.request_id == request_id)
+                                {
+                                    let tracked_response = TrackedResponse {
+                                        status: status,
+                                        content_type: headers.get("content-type")
+                                            .and_then(|s| s.as_str())
+                                            .map(String::from)
+                                            .unwrap_or_default(),
+                                    };
+                                    entry.response = Some(tracked_response);
                                 }
                             }
                         }
@@ -1339,6 +1375,8 @@ async fn handle_evaluate(cmd: &Value, state: &DaemonState) -> Result<Value, Stri
 }
 
 async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
+    state.request_tracking = false;
+
     if let Some(ref mgr) = state.browser {
         if let Some(ref session_name) = state.session_name {
             if let Ok(session_id) = mgr.active_session_id() {
@@ -4143,9 +4181,8 @@ async fn handle_responsebody(cmd: &Value, state: &DaemonState) -> Result<Value, 
                 if event.method == "Network.responseReceived"
                     && event.session_id.as_deref() == Some(&session_id)
                 {
-                    if let Some(resp_url) = event
-                        .params
-                        .get("response")
+                    let response = event.params.get("response");
+                    if let Some(resp_url) = response
                         .and_then(|r| r.get("url"))
                         .and_then(|u| u.as_str())
                     {
@@ -4155,15 +4192,11 @@ async fn handle_responsebody(cmd: &Value, state: &DaemonState) -> Result<Value, 
                                 .get("requestId")
                                 .and_then(|v| v.as_str())
                                 .ok_or("No requestId in response event")?;
-                            let status = event
-                                .params
-                                .get("response")
+                            let status = response
                                 .and_then(|r| r.get("status"))
                                 .and_then(|v| v.as_i64())
                                 .unwrap_or(0);
-                            let headers = event
-                                .params
-                                .get("response")
+                            let headers = response
                                 .and_then(|r| r.get("headers"))
                                 .cloned()
                                 .unwrap_or(json!({}));
@@ -4735,20 +4768,61 @@ async fn handle_requests(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
                     .await;
             }
         }
+        return Ok(json!({ "tracking": true }));
+    }
+    else if cmd.get("close").and_then(|v| v.as_bool()).unwrap_or(false) {
+        state.request_tracking = false;
+        if let Some(ref mgr) = state.browser {
+            if let Ok(session_id) = mgr.active_session_id() {
+                let _ = mgr
+                    .client
+                    .send_command_no_params("Network.disable", Some(session_id))
+                    .await;
+            }
+        }
+        return Ok(json!({ "tracking": false }));
     }
 
-    let filter = cmd.get("filter").and_then(|v| v.as_str());
-    let requests: Vec<&TrackedRequest> = if let Some(f) = filter {
-        state
-            .tracked_requests
-            .iter()
-            .filter(|r| r.url.contains(f))
-            .collect()
-    } else {
-        state.tracked_requests.iter().collect()
-    };
+    let req_id = cmd.get("req_id").and_then(|v| v.as_str());
+    if let Some(request_id) = req_id {
+        if let Some(ref mgr) = state.browser {
+            if let Ok(session_id) = mgr.active_session_id() {
+                let body_result = mgr
+                    .client
+                    .send_command(
+                        "Network.getResponseBody",
+                        Some(json!({ "requestId": request_id })),
+                        Some(&session_id),
+                    )
+                    .await?;
+                let body = body_result
+                    .get("body")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
 
-    Ok(json!({ "requests": requests }))
+                return Ok(
+                    json!({"body":body}),
+                );
+            }
+        }
+        return Ok(
+            json!({"error":"no active session"}),
+        );
+    }
+    else {
+        let filter = cmd.get("filter").and_then(|v| v.as_str());
+        let requests: Vec<&TrackedRequest> = if let Some(f) = filter {
+            state
+                .tracked_requests
+                .iter()
+                .filter(|r| r.url.contains(f))
+                .collect()
+        } else {
+            state.tracked_requests.iter().collect()
+        };
+
+        Ok(json!({ "requests": requests }))
+    }
 }
 
 async fn handle_http_credentials(cmd: &Value, state: &DaemonState) -> Result<Value, String> {

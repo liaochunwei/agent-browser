@@ -1721,6 +1721,8 @@ Subcommands:
   requests [options]         List captured requests
     --clear                  Clear request log
     --filter <pattern>       Filter by URL pattern
+    --close                  Cancel capture request
+    --response <request_id>  Get the response body of a specified request
 
 Global Options:
   --json               Output as JSON
@@ -1733,6 +1735,8 @@ Examples:
   agent-browser network requests
   agent-browser network requests --filter "api"
   agent-browser network requests --clear
+  agent-browser network requests --close
+  agent-browser network requests --response 3345.1234
 "##
         }
 
@@ -2483,7 +2487,7 @@ Browser Settings:  agent-browser set <setting> [value]
 Network:  agent-browser network <action>
   route <url> [--abort|--body <json>]
   unroute [url]
-  requests [--clear] [--filter <pattern>]
+  requests [--clear|--close|--filter <pattern>|--response <request_id>]
 
 Storage:
   cookies [get|set|clear]    Manage cookies (set supports --url, --domain, --path, --httpOnly, --secure, --sameSite, --expires)
