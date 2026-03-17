@@ -395,7 +395,7 @@ impl DaemonState {
                                     .har_entries
                                     .iter_mut()
                                     .rev()
-                                    .find(|e| e.request_id == request_id.clone())
+                                    .find(|e| e.request_id == request_id)
                                 {
                                     entry.status = status;
                                     entry.mime_type = mime_type;
