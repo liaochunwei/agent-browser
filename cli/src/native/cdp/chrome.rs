@@ -661,7 +661,6 @@ fn expand_tilde(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::EnvGuard;
 
     #[cfg(unix)]
     fn spawn_noop_child() -> Child {

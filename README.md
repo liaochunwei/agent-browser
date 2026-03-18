@@ -266,11 +266,12 @@ agent-browser network requests --response request_id --json # Get the response b
 
 ```bash
 agent-browser tab                     # List tabs
+agent-browser tab list                # List tabs refresh title
 agent-browser tab new [url]           # New tab (optionally with URL)
 agent-browser tab <n>                 # Switch to tab n
+agent-browser tab close               # Close active tab
 agent-browser tab close [n]           # Close tab
-agent-browser tab close active        # Close active
-agent-browser tab close all           # Close all
+agent-browser tab close all           # Close all tab
 agent-browser window new              # New window
 ```
 

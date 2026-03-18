@@ -940,7 +940,7 @@ pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError
                 }
                 Ok(cmd)
             }
-            Some("list") => Ok(json!({ "id": id, "action": "tab_list" })),
+            Some("list") => Ok(json!({ "id": id, "action": "tab_refresh" })),
             Some("close") => {
                 let mut cmd = json!({ "id": id, "action": "tab_close" });
                 if rest.contains(&"all") {

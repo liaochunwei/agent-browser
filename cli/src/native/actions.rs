@@ -14,6 +14,7 @@ use super::cdp::client::CdpClient;
 use super::cdp::types::{
     AttachToTargetParams, AttachToTargetResult, CdpEvent, ConsoleApiCalledEvent,
     CreateTargetResult, ExceptionThrownEvent, TargetCreatedEvent, TargetDestroyedEvent,
+    TargetInfoChangedEvent,
 };
 use super::cookies;
 use super::diff;
@@ -250,16 +251,18 @@ impl DaemonState {
         Vec<i64>,
         Vec<TargetCreatedEvent>,
         Vec<String>,
+        Vec<TargetInfoChangedEvent>,
         Vec<FetchPausedRequest>,
     ) {
         let rx = match self.event_rx.as_mut() {
             Some(rx) => rx,
-            None => return (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
+            None => return (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()),
         };
 
         let mut pending_acks: Vec<i64> = Vec::new();
         let mut new_targets: Vec<TargetCreatedEvent> = Vec::new();
         let mut destroyed_targets: Vec<String> = Vec::new();
+        let mut update_targets: Vec<TargetInfoChangedEvent> = Vec::new();
         let mut fetch_paused: Vec<FetchPausedRequest> = Vec::new();
 
         loop {
@@ -271,14 +274,13 @@ impl DaemonState {
                             if let Ok(te) =
                                 serde_json::from_value::<TargetCreatedEvent>(event.params.clone())
                             {
-                                if (te.target_info.target_type == "page"
-                                    || te.target_info.target_type == "webview")
-                                    && !te.target_info.url.is_empty()
+                                if te.target_info.target_type == "page"
+                                    || te.target_info.target_type == "webview"
                                 {
                                     let already_tracked = self
                                         .browser
                                         .as_ref()
-                                        .is_none_or(|b| b.has_target(&te.target_info.target_id));
+                                        .is_some_and(|b| b.has_target(&te.target_info.target_id));
                                     if !already_tracked {
                                         new_targets.push(te);
                                     }
@@ -291,6 +293,18 @@ impl DaemonState {
                                 serde_json::from_value::<TargetDestroyedEvent>(event.params.clone())
                             {
                                 destroyed_targets.push(te.target_id);
+                            }
+                            continue;
+                        }
+                        "Target.targetInfoChanged" => {
+                            if let Ok(te) = serde_json::from_value::<TargetInfoChangedEvent>(
+                                event.params.clone(),
+                            ) {
+                                if te.target_info.target_type == "page"
+                                    || te.target_info.target_type == "webview"
+                                {
+                                    update_targets.push(te);
+                                }
                             }
                             continue;
                         }
@@ -591,7 +605,13 @@ impl DaemonState {
             }
         }
 
-        (pending_acks, new_targets, destroyed_targets, fetch_paused)
+        (
+            pending_acks,
+            new_targets,
+            destroyed_targets,
+            update_targets,
+            fetch_paused,
+        )
     }
 }
 
@@ -604,7 +624,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         .to_string();
 
     // Drain pending CDP events (console, errors, screencast frames, target lifecycle, fetch)
-    let (pending_acks, new_targets, destroyed_targets, fetch_paused) = state.drain_cdp_events();
+    let (pending_acks, new_targets, destroyed_targets, update_targets, fetch_paused) =
+        state.drain_cdp_events();
     if !pending_acks.is_empty() {
         if let Some(ref browser) = state.browser {
             if let Ok(session_id) = browser.active_session_id() {
@@ -656,6 +677,12 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
                     target_type: te.target_info.target_type.clone(),
                 });
             }
+        }
+    }
+
+    for te in &update_targets {
+        if let Some(ref mut mgr) = state.browser {
+            let _ = mgr.update_page(&te.target_info.target_id).await;
         }
     }
 
@@ -832,6 +859,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "recording_restart" => handle_recording_restart(cmd, state).await,
         "pdf" => handle_pdf(cmd, state).await,
         "tab_list" => handle_tab_list(state).await,
+        "tab_refresh" => handle_tab_refresh(state).await,
         "tab_new" => handle_tab_new(cmd, state).await,
         "tab_switch" => handle_tab_switch(cmd, state).await,
         "tab_close" => handle_tab_close(cmd, state).await,
@@ -2662,6 +2690,13 @@ async fn handle_tab_list(state: &mut DaemonState) -> Result<Value, String> {
     Ok(json!({ "tabs": tabs }))
 }
 
+async fn handle_tab_refresh(state: &mut DaemonState) -> Result<Value, String> {
+    let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+    state.ref_map.clear();
+    let tabs = mgr.tab_refresh().await?;
+    Ok(json!({ "tabs": tabs }))
+}
+
 async fn handle_tab_new(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
     let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
     let url = cmd.get("url").and_then(|v| v.as_str());
@@ -2686,7 +2721,7 @@ async fn handle_tab_close(cmd: &Value, state: &mut DaemonState) -> Result<Value,
         mgr.tab_close_all().await
     } else if cmd.get("active").and_then(|v| v.as_bool()).unwrap_or(false) {
         state.ref_map.clear();
-        mgr.tab_close_active().await
+        mgr.tab_close(None).await
     } else {
         let index = cmd
             .get("index")

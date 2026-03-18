@@ -127,7 +127,7 @@ pub struct AttachToTargetParams {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ActivateTargetParams {
+pub struct GetTargetInfoParams {
     pub target_id: String,
 }
 
