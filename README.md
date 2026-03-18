@@ -269,9 +269,11 @@ agent-browser network route <url> --abort      # Block requests
 agent-browser network route <url> --body <json>  # Mock response
 agent-browser network unroute [url]            # Remove routes
 agent-browser network requests                 # View tracked requests
+agent-browser network requests --close         # Close tracked requests
 agent-browser network requests --filter api    # Filter requests
 agent-browser network har start                # Start HAR recording
 agent-browser network har stop [output.har]    # Stop and save HAR (temp path if omitted)
+agent-browser network requests --response request_id --json # Get the response body of a specified request
 ```
 
 ### Tabs & Windows

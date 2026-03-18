@@ -1727,7 +1727,12 @@ Subcommands:
   requests [options]         List captured requests
     --clear                  Clear request log
     --filter <pattern>       Filter by URL pattern
+<<<<<<< HEAD
   har <start|stop> [path]    Record and export a HAR file
+=======
+    --close                  Cancel capture request
+    --response <request_id>  Get the response body of a specified request
+>>>>>>> 84b295f (New feature: Added support for handling response status, content-type,)
 
 Global Options:
   --json               Output as JSON
@@ -1742,6 +1747,8 @@ Examples:
   agent-browser network requests --clear
   agent-browser network har start
   agent-browser network har stop ./capture.har
+  agent-browser network requests --close
+  agent-browser network requests --response 3345.1234
 "##
         }
 
@@ -2540,8 +2547,8 @@ Browser Settings:  agent-browser set <setting> [value]
 Network:  agent-browser network <action>
   route <url> [--abort|--body <json>]
   unroute [url]
-  requests [--clear] [--filter <pattern>]
   har <start|stop> [path]
+  requests [--clear|--close|--filter <pattern>|--response <request_id>]
 
 Storage:
   cookies [get|set|clear]    Manage cookies (set supports --url, --domain, --path, --httpOnly, --secure, --sameSite, --expires)

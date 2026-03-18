@@ -540,11 +540,13 @@ async fn test_daemon_state_new_defaults() {
 async fn test_tracked_request_struct() {
     use super::actions::TrackedRequest;
     let tr = TrackedRequest {
+        request_id: "req-123".to_string(),
         url: "https://example.com/api".to_string(),
         method: "GET".to_string(),
         headers: json!({"Accept": "text/html"}),
         timestamp: 12345,
         resource_type: "Document".to_string(),
+        response: None,
     };
     let serialized = serde_json::to_value(&tr).unwrap();
     assert_eq!(serialized["url"], "https://example.com/api");
@@ -560,18 +562,22 @@ async fn test_request_tracking_state() {
     assert!(state.tracked_requests.is_empty());
 
     state.tracked_requests.push(super::actions::TrackedRequest {
+        request_id: "req-1".to_string(),
         url: "https://example.com".to_string(),
         method: "GET".to_string(),
         headers: json!({}),
         timestamp: 1,
         resource_type: "Document".to_string(),
+        response: None,
     });
     state.tracked_requests.push(super::actions::TrackedRequest {
+        request_id: "req-2".to_string(),
         url: "https://other.com".to_string(),
         method: "POST".to_string(),
         headers: json!({}),
         timestamp: 2,
         resource_type: "XHR".to_string(),
+        response: None,
     });
     assert_eq!(state.tracked_requests.len(), 2);
 
