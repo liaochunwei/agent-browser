@@ -200,7 +200,7 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
         None => {
-            find_chrome().ok_or("Chrome not found. Run `agent-browser install` to download Chrome, or use --executable-path.")?
+            find_chrome().ok_or("Chrome not found. use --cdp, or use --executable-path.")?
         }
     };
 
@@ -471,11 +471,6 @@ pub fn find_chrome() -> Option<PathBuf> {
         }
     }
 
-    // 3. Fallback: check Playwright's browser cache (for existing installs)
-    if let Some(p) = find_playwright_chromium() {
-        return Some(p);
-    }
-
     None
 }
 
@@ -651,68 +646,6 @@ fn should_disable_dev_shm(existing_args: &[String]) -> bool {
     }
 
     false
-}
-
-/// Search Playwright's browser cache for a Chromium binary.
-/// Legacy fallback for users who previously installed Chromium via Playwright.
-fn find_playwright_chromium() -> Option<PathBuf> {
-    let mut search_dirs = Vec::new();
-
-    if let Ok(custom) = std::env::var("PLAYWRIGHT_BROWSERS_PATH") {
-        search_dirs.push(PathBuf::from(custom));
-    }
-
-    if let Some(home) = dirs::home_dir() {
-        search_dirs.push(home.join(".cache/ms-playwright"));
-    }
-
-    for dir in &search_dirs {
-        if !dir.is_dir() {
-            continue;
-        }
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            let mut matches: Vec<PathBuf> = entries
-                .filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.file_name()
-                        .to_str()
-                        .map(|n| n.starts_with("chromium-"))
-                        .unwrap_or(false)
-                })
-                .filter_map(|e| {
-                    let candidate = build_playwright_binary_path(&e.path());
-                    if candidate.exists() {
-                        Some(candidate)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            // Sort descending so the newest version wins
-            matches.sort();
-            matches.reverse();
-            if let Some(p) = matches.into_iter().next() {
-                return Some(p);
-            }
-        }
-    }
-
-    None
-}
-
-#[cfg(target_os = "linux")]
-fn build_playwright_binary_path(chromium_dir: &Path) -> PathBuf {
-    chromium_dir.join("chrome-linux64/chrome")
-}
-
-#[cfg(target_os = "macos")]
-fn build_playwright_binary_path(chromium_dir: &Path) -> PathBuf {
-    chromium_dir.join("chrome-mac/Chromium.app/Contents/MacOS/Chromium")
-}
-
-#[cfg(target_os = "windows")]
-fn build_playwright_binary_path(chromium_dir: &Path) -> PathBuf {
-    chromium_dir.join("chrome-win/chrome.exe")
 }
 
 fn expand_tilde(path: &str) -> String {

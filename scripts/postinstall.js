@@ -2,14 +2,23 @@
 
 /**
  * Postinstall script for agent-browser
- * 
+ *
  * Downloads the platform-specific native binary if not present.
  * On global installs, patches npm's bin entry to use the native binary directly:
  * - Windows: Overwrites .cmd/.ps1 shims
  * - Mac/Linux: Replaces symlink to point to native binary
  */
 
-import { existsSync, mkdirSync, chmodSync, createWriteStream, unlinkSync, writeFileSync, symlinkSync, lstatSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  chmodSync,
+  createWriteStream,
+  unlinkSync,
+  writeFileSync,
+  symlinkSync,
+  lstatSync,
+} from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { platform, arch } from 'os';
@@ -51,7 +60,7 @@ const DOWNLOAD_URL = `https://github.com/${GITHUB_REPO}/releases/download/v${ver
 async function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
     const file = createWriteStream(dest);
-    
+
     const request = (url) => {
       get(url, (response) => {
         // Handle redirects
@@ -59,12 +68,12 @@ async function downloadFile(url, dest) {
           request(response.headers.location);
           return;
         }
-        
+
         if (response.statusCode !== 200) {
           reject(new Error(`Failed to download: HTTP ${response.statusCode}`));
           return;
         }
-        
+
         response.pipe(file);
         file.on('finish', () => {
           file.close();
@@ -75,7 +84,7 @@ async function downloadFile(url, dest) {
         reject(err);
       });
     };
-    
+
     request(url);
   });
 }
@@ -88,10 +97,10 @@ async function main() {
       chmodSync(binaryPath, 0o755);
     }
     console.log(`✓ Native binary ready: ${binaryName}`);
-    
+
     // On global installs, fix npm's bin entry to use native binary directly
     await fixGlobalInstallBin();
-    
+
     showInstallReminder();
     return;
   }
@@ -106,12 +115,12 @@ async function main() {
 
   try {
     await downloadFile(DOWNLOAD_URL, binaryPath);
-    
+
     // Make executable on Unix
     if (platform() !== 'win32') {
       chmodSync(binaryPath, 0o755);
     }
-    
+
     console.log(`✓ Downloaded native binary: ${binaryName}`);
   } catch (err) {
     console.log(`Could not download native binary: ${err.message}`);
@@ -136,7 +145,7 @@ function findSystemChrome() {
       '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
       '/Applications/Chromium.app/Contents/MacOS/Chromium',
     ];
-    return candidates.find(p => existsSync(p)) || null;
+    return candidates.find((p) => existsSync(p)) || null;
   }
   if (os === 'linux') {
     const names = ['google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium'];
@@ -154,7 +163,7 @@ function findSystemChrome() {
       'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
       'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     ];
-    return candidates.find(p => p && existsSync(p)) || null;
+    return candidates.find((p) => p && existsSync(p)) || null;
   }
   return null;
 }
@@ -171,16 +180,6 @@ function showInstallReminder() {
 
   console.log('');
   console.log('  ⚠ No Chrome installation detected.');
-  console.log('  If you plan to use a local browser, run:');
-  console.log('');
-  console.log('    agent-browser install');
-  if (platform() === 'linux') {
-    console.log('');
-    console.log('  On Linux, include system dependencies with:');
-    console.log('');
-    console.log('    agent-browser install --with-deps');
-  }
-  console.log('');
   console.log('  You can skip this if you use --cdp, --provider, --engine, or --executable-path.');
   console.log('');
 }

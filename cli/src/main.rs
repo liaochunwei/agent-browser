@@ -23,7 +23,6 @@ use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_I
 use commands::{gen_id, parse_command, ParseError};
 use connection::{ensure_daemon, get_socket_dir, send_command, DaemonOptions};
 use flags::{clean_args, parse_flags, Flags};
-use install::run_install;
 use output::{
     print_command_help, print_help, print_response_with_opts, print_version, OutputOptions,
 };
@@ -218,19 +217,6 @@ fn main() {
 
     if clean.is_empty() {
         print_help();
-        return;
-    }
-
-    // Handle install separately
-    if clean.first().map(|s| s.as_str()) == Some("install") {
-        let with_deps = args.iter().any(|a| a == "--with-deps" || a == "-d");
-        run_install(with_deps);
-        return;
-    }
-
-    // Handle upgrade separately
-    if clean.first().map(|s| s.as_str()) == Some("upgrade") {
-        run_upgrade();
         return;
     }
 

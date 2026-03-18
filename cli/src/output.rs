@@ -2255,40 +2255,6 @@ Examples:
 "##
         }
 
-        // === Install ===
-        "install" => {
-            r##"
-agent-browser install - Install browser binaries
-
-Usage: agent-browser install [--with-deps]
-
-Downloads and installs browser binaries required for automation.
-
-Options:
-  -d, --with-deps      Also install system dependencies (Linux only)
-
-Examples:
-  agent-browser install
-  agent-browser install --with-deps
-"##
-        }
-
-        // === Upgrade ===
-        "upgrade" => {
-            r##"
-agent-browser upgrade - Upgrade to the latest version
-
-Usage: agent-browser upgrade
-
-Detects the current installation method (npm, Homebrew, or Cargo) and runs
-the appropriate update command. Displays the version change on success, or
-informs you if you are already on the latest version.
-
-Examples:
-  agent-browser upgrade
-"##
-        }
-
         // === Connect ===
         "connect" => {
             r##"
@@ -2591,11 +2557,6 @@ Confirmation:
 Sessions:
   session                    Show current session name
   session list               List active sessions
-
-Setup:
-  install                    Install browser binaries
-  install --with-deps        Also install system dependencies (Linux)
-  upgrade                    Upgrade to the latest version
 
 Snapshot Options:
   -i, --interactive          Only interactive elements
