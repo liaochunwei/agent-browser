@@ -125,6 +125,12 @@ pub struct AttachToTargetParams {
     pub flatten: bool,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivateTargetParams {
+    pub target_id: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AttachToTargetResult {

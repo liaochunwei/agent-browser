@@ -2521,7 +2521,7 @@ Storage:
   storage <local|session>    Manage web storage
 
 Tabs:
-  tab [new|list|close|<n>]   Manage tabs
+  tab [new|list|close|<n>] [all|active] Manage tabs
 
 Diff:
   diff snapshot              Compare current vs last snapshot
@@ -2670,7 +2670,6 @@ Install:
   npm install -g agent-browser           # npm
   brew install agent-browser             # Homebrew
   cargo install agent-browser            # Cargo
-  agent-browser install                  # Download Chrome (first time)
 
 Examples:
   agent-browser open example.com

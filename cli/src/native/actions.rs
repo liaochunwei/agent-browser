@@ -2655,9 +2655,10 @@ async fn handle_keyboard(cmd: &Value, state: &DaemonState) -> Result<Value, Stri
 // Phase 5 handlers
 // ---------------------------------------------------------------------------
 
-async fn handle_tab_list(state: &DaemonState) -> Result<Value, String> {
-    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
-    let tabs = mgr.tab_list();
+async fn handle_tab_list(state: &mut DaemonState) -> Result<Value, String> {
+    let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+    state.ref_map.clear();
+    let tabs = mgr.tab_list().await?;
     Ok(json!({ "tabs": tabs }))
 }
 
@@ -2680,12 +2681,20 @@ async fn handle_tab_switch(cmd: &Value, state: &mut DaemonState) -> Result<Value
 
 async fn handle_tab_close(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
     let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
-    let index = cmd
-        .get("index")
-        .and_then(|v| v.as_u64())
-        .map(|i| i as usize);
-    state.ref_map.clear();
-    mgr.tab_close(index).await
+    if cmd.get("all").and_then(|v| v.as_bool()).unwrap_or(false) {
+        state.ref_map.clear();
+        mgr.tab_close_all().await
+    } else if cmd.get("active").and_then(|v| v.as_bool()).unwrap_or(false) {
+        state.ref_map.clear();
+        mgr.tab_close_active().await
+    } else {
+        let index = cmd
+            .get("index")
+            .and_then(|v| v.as_u64())
+            .map(|i| i as usize);
+        state.ref_map.clear();
+        mgr.tab_close(index).await
+    }
 }
 
 async fn handle_viewport(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
@@ -5282,14 +5291,6 @@ async fn handle_requests(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
     } else if cmd.get("close").and_then(|v| v.as_bool()).unwrap_or(false) {
         state.request_tracking = false;
         state.tracked_requests.clear();
-        if let Some(ref mgr) = state.browser {
-            if let Ok(session_id) = mgr.active_session_id() {
-                let _ = mgr
-                    .client
-                    .send_command_no_params("Network.disable", Some(session_id))
-                    .await;
-            }
-        }
         return Ok(json!({ "tracking": false }));
     }
 

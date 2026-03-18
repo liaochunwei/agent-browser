@@ -199,9 +199,7 @@ fn build_chrome_args(options: &LaunchOptions) -> Result<ChromeArgs, String> {
 pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
-        None => {
-            find_chrome().ok_or("Chrome not found. use --cdp, or use --executable-path.")?
-        }
+        None => find_chrome().ok_or("Chrome not found. use --cdp, or use --executable-path.")?,
     };
 
     let max_attempts = 3;
@@ -746,14 +744,6 @@ mod tests {
         let lines = vec!["info line".to_string(), "another info line".to_string()];
         let msg = chrome_launch_error("Chrome exited", &lines);
         assert!(msg.contains("last 2 lines"));
-    }
-
-    #[test]
-    fn test_find_playwright_chromium_nonexistent() {
-        let _guard = EnvGuard::new(&["PLAYWRIGHT_BROWSERS_PATH"]);
-        _guard.set("PLAYWRIGHT_BROWSERS_PATH", "/nonexistent/path");
-        let result = find_playwright_chromium();
-        assert!(result.is_none());
     }
 
     #[test]
