@@ -1,5 +1,5 @@
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -746,109 +746,27 @@ impl BrowserManager {
             self.active_page_index = self.pages.len() - 1;
         }
     }
-
-    pub async fn tab_list(&mut self) -> Result<Vec<Value>, String> {
-        let result: GetTargetsResult = self
-            .client
-            .send_command_typed("Target.getTargets", &json!({}), None)
-            .await?;
-
-        let page_targets: Vec<TargetInfo> = result
-            .target_infos
-            .into_iter()
-            .filter(|t| {
-                (t.target_type == "page" || t.target_type == "webview")
-                    && !t.url.is_empty()
-                    && !is_internal_chrome_target(&t.url)
-            })
-            .collect();
-
-        if page_targets.is_empty() {
-            self.pages.clear();
-            // Create a new tab
-            let result: CreateTargetResult = self
-                .client
-                .send_command_typed(
-                    "Target.createTarget",
-                    &CreateTargetParams {
-                        url: "about:blank".to_string(),
-                    },
-                    None,
-                )
-                .await?;
-
-            let attach_result: AttachToTargetResult = self
-                .client
-                .send_command_typed(
-                    "Target.attachToTarget",
-                    &AttachToTargetParams {
-                        target_id: result.target_id.clone(),
-                        flatten: true,
-                    },
-                    None,
-                )
-                .await?;
-
-            self.pages.push(PageInfo {
-                target_id: result.target_id,
-                session_id: attach_result.session_id.clone(),
-                url: "about:blank".to_string(),
-                title: String::new(),
-                target_type: "page".to_string(),
-            });
-            self.active_page_index = 0;
-            self.enable_domains(&attach_result.session_id).await?;
-        } else {
-            let mut _pages: HashMap<String, PageInfo> = HashMap::new();
-            while let Some(page) = self.pages.pop() {
-                _pages.insert(page.target_id.clone(), page);
-            }
-            self.pages.clear();
-            for target in &page_targets {
-                if _pages.contains_key(&target.target_id) {
-                    let mut page = _pages.remove(&target.target_id).unwrap();
-                    page.url = target.url.clone();
-                    page.title = target.title.clone();
-                    page.target_type = target.target_type.clone();
-                    self.pages.push(page);
-                } else {
-                    let attach_result: AttachToTargetResult = self
-                        .client
-                        .send_command_typed(
-                            "Target.attachToTarget",
-                            &AttachToTargetParams {
-                                target_id: target.target_id.clone(),
-                                flatten: true,
-                            },
-                            None,
-                        )
-                        .await?;
-                    self.enable_domains(&attach_result.session_id).await?;
-
-                    let info: Result<TargetInfo, _> = self
-                        .client
-                        .send_command_typed(
-                            "Target.getTargetInfo",
-                            &ActivateTargetParams {
-                                target_id: target.target_id.clone(),
-                            },
-                            None,
-                        )
-                        .await;
-                    if let Ok(item) = info {
-                        self.pages.push(PageInfo {
-                            target_id: target.target_id.clone(),
-                            session_id: attach_result.session_id.clone(),
-                            url: item.url.clone(),
-                            title: item.title.clone(),
-                            target_type: item.target_type.clone(),
-                        });
-                    }
-                }
-            }
-            self.update_active_page_if_needed();
+    pub async fn tab_refresh(&mut self) -> Result<Vec<Value>, String> {
+        let targets: Vec<String> = self.pages.iter().map(|p| p.target_id.clone()).collect();
+        for target in targets {
+            let _ = self.update_page(&target).await;
         }
-
+        Ok(self
+            .pages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                json!({
+                    "index": i,
+                    "title": p.title,
+                    "url": p.url,
+                    "type": p.target_type,
+                    "active": i == self.active_page_index,
+                })
+            })
+            .collect())
+    }
+    pub async fn tab_list(&mut self) -> Result<Vec<Value>, String> {
         Ok(self
             .pages
             .iter()
@@ -935,15 +853,6 @@ impl BrowserManager {
 
         Ok(json!({ "index": index, "url": url, "title": title }))
     }
-    pub async fn tab_close_active(&mut self) -> Result<Value, String> {
-        let index = self.active_page_index;
-        if let Some(_) = self.pages.get_mut(index) {
-            self.pages.remove(index);
-        }
-        self.update_active_page_if_needed();
-        let _ = self.tab_switch(self.active_page_index).await;
-        Ok(json!({ "index": index }))
-    }
     pub async fn tab_close_all(&mut self) -> Result<Value, String> {
         while let Some(page) = self.pages.pop() {
             let _ = self
@@ -984,11 +893,8 @@ impl BrowserManager {
             .await;
 
         if self.active_page_index >= self.pages.len() {
-            self.active_page_index = self.pages.len() - 1;
+            let _ = self.tab_switch(self.pages.len() - 1).await;
         }
-
-        let session_id = self.pages[self.active_page_index].session_id.clone();
-        self.enable_domains(&session_id).await?;
 
         Ok(json!({ "closed": target_index, "activeIndex": self.active_page_index }))
     }
@@ -1234,6 +1140,29 @@ impl BrowserManager {
 
     pub fn update_page_target_info(&mut self, target: &TargetInfo) -> bool {
         update_page_target_info_in_pages(&mut self.pages, target)
+    }
+
+    pub async fn update_page(&mut self, target_id: &str) -> Result<(), String> {
+        if let Some(pos) = self.pages.iter().position(|p| p.target_id == target_id) {
+            self.active_page_index = pos;
+            let session_id = self.pages[pos].session_id.clone();
+            self.enable_domains(&session_id).await?;
+
+            // Bring tab to front
+            let _ = self
+                .client
+                .send_command("Page.bringToFront", None, Some(&session_id))
+                .await;
+
+            let url = self.get_url().await.unwrap_or_default();
+            let title = self.get_title().await.unwrap_or_default();
+
+            if let Some(page) = self.pages.get_mut(pos) {
+                page.url = url.clone();
+                page.title = title.clone();
+            }
+        }
+        Ok(())
     }
 
     pub fn remove_page_by_target_id(&mut self, target_id: &str) {

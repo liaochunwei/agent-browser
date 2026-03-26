@@ -425,6 +425,19 @@ agent-browser --allow-file-access open file:///path/to/page.html
 agent-browser screenshot output.png
 ```
 
+### Tab(Page) & Windows
+
+```bash
+agent-browser tab                     # List tabs
+agent-browser tab list                # List tabs refresh title
+agent-browser tab new [url]           # New tab (optionally with URL)
+agent-browser tab <n>                 # Switch to tab n
+agent-browser tab close               # Close active tab
+agent-browser tab close [n]           # Close tab
+agent-browser tab close all           # Close all tab
+agent-browser window new              # New window
+```
+
 ### Network Request & Response
 
 ```bash

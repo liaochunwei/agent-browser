@@ -474,7 +474,7 @@ impl DaemonState {
                                     let already_tracked = self
                                         .browser
                                         .as_ref()
-                                        .is_none_or(|b| b.has_target(&te.target_info.target_id));
+                                        .is_some_and(|b| b.has_target(&te.target_info.target_id));
                                     if !already_tracked {
                                         new_targets.push(te);
                                     }
@@ -963,6 +963,11 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
             mgr.update_page_target_info(&te.target_info);
         }
     }
+    for te in &changed_targets {
+        if let Some(ref mut mgr) = state.browser {
+            let _ = mgr.update_page(&te.target_info.target_id).await;
+        }
+    }
 
     // Hot-reload and check action policy
     if let Some(ref mut policy) = state.policy {
@@ -1135,6 +1140,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "recording_restart" => handle_recording_restart(cmd, state).await,
         "pdf" => handle_pdf(cmd, state).await,
         "tab_list" => handle_tab_list(state).await,
+        "tab_refresh" => handle_tab_refresh(state).await,
         "tab_new" => handle_tab_new(cmd, state).await,
         "tab_switch" => handle_tab_switch(cmd, state).await,
         "tab_close" => handle_tab_close(cmd, state).await,
@@ -3235,6 +3241,13 @@ async fn handle_tab_list(state: &mut DaemonState) -> Result<Value, String> {
     Ok(json!({ "tabs": tabs }))
 }
 
+async fn handle_tab_refresh(state: &mut DaemonState) -> Result<Value, String> {
+    let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+    state.ref_map.clear();
+    let tabs = mgr.tab_refresh().await?;
+    Ok(json!({ "tabs": tabs }))
+}
+
 async fn handle_tab_new(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
     let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
     let url = cmd.get("url").and_then(|v| v.as_str());
@@ -3265,7 +3278,7 @@ async fn handle_tab_close(cmd: &Value, state: &mut DaemonState) -> Result<Value,
     } else if cmd.get("active").and_then(|v| v.as_bool()).unwrap_or(false) {
         state.ref_map.clear();
         state.iframe_sessions.clear();
-        mgr.tab_close_active().await
+        mgr.tab_close(None).await
     } else {
         let index = cmd
             .get("index")
