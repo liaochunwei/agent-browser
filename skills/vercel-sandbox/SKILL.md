@@ -197,7 +197,6 @@ async function createSnapshot(): Promise<string> {
     `sudo dnf clean all 2>&1 && sudo dnf install -y --skip-broken ${CHROMIUM_SYSTEM_DEPS.join(" ")} 2>&1 && sudo ldconfig 2>&1`,
   ]);
   await sandbox.runCommand("npm", ["install", "-g", "agent-browser"]);
-  await sandbox.runCommand("npx", ["agent-browser", "install"]);
 
   const snapshot = await sandbox.snapshot();
   return snapshot.snapshotId;

@@ -10,7 +10,6 @@ Installs the native Rust binary:
 
 ```bash
 npm install -g agent-browser
-agent-browser install  # Download Chrome from Chrome for Testing (first time only)
 ```
 
 ### Project Installation (local dependency)
@@ -19,7 +18,6 @@ For projects that want to pin the version in `package.json`:
 
 ```bash
 npm install agent-browser
-agent-browser install
 ```
 
 Then use via `package.json` scripts or by invoking `agent-browser` directly.
@@ -28,14 +26,12 @@ Then use via `package.json` scripts or by invoking `agent-browser` directly.
 
 ```bash
 brew install agent-browser
-agent-browser install  # Download Chrome from Chrome for Testing (first time only)
 ```
 
 ### Cargo (Rust)
 
 ```bash
 cargo install agent-browser
-agent-browser install  # Download Chrome from Chrome for Testing (first time only)
 ```
 
 ### From Source
@@ -47,15 +43,6 @@ pnpm install
 pnpm build
 pnpm build:native   # Requires Rust (https://rustup.rs)
 pnpm link --global  # Makes agent-browser available globally
-agent-browser install
-```
-
-### Linux Dependencies
-
-On Linux, install system dependencies:
-
-```bash
-agent-browser install --with-deps
 ```
 
 ### Updating
@@ -70,7 +57,6 @@ Detects your installation method (npm, Homebrew, or Cargo) and runs the appropri
 
 ### Requirements
 
-- **Chrome** - Run `agent-browser install` to download Chrome from [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing/) (Google's official automation channel). No Playwright or Node.js required for the daemon.
 - **Rust** - Only needed when building from source (see From Source above).
 
 ## Quick Start
@@ -354,14 +340,6 @@ agent-browser state clean --older-than <days>  # Delete old states
 agent-browser back                    # Go back
 agent-browser forward                 # Go forward
 agent-browser reload                  # Reload page
-```
-
-### Setup
-
-```bash
-agent-browser install                 # Download Chrome from Chrome for Testing (Google's official automation channel)
-agent-browser install --with-deps     # Also install system deps (Linux)
-agent-browser upgrade                 # Upgrade agent-browser to the latest version
 ```
 
 ## Authentication

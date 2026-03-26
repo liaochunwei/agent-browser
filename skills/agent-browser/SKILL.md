@@ -1,12 +1,12 @@
 ---
 name: agent-browser
 description: Browser automation CLI for AI agents. Use when the user needs to interact with websites, including navigating pages, filling forms, clicking buttons, taking screenshots, extracting data, testing web apps, or automating any browser task. Triggers include requests to "open a website", "fill out a form", "click a button", "take a screenshot", "scrape data from a page", "test this web app", "login to a site", "automate browser actions", or any task requiring programmatic web interaction.
-allowed-tools: Bash(npx agent-browser:*), Bash(agent-browser:*)
+allowed-tools: Bash(agent-browser:*)
 ---
 
 # Browser Automation with agent-browser
 
-The CLI uses Chrome/Chromium via CDP directly. Install via `npm i -g agent-browser`, `brew install agent-browser`, or `cargo install agent-browser`. Run `agent-browser install` to download Chrome. Run `agent-browser upgrade` to update to the latest version.
+The CLI uses Chrome/Chromium via CDP directly. Install via `npm i -g agent-browser`, `brew install agent-browser`, or `cargo install agent-browser`. 
 
 ## Core Workflow
 
@@ -196,6 +196,17 @@ agent-browser diff screenshot --baseline before.png  # Visual pixel diff
 agent-browser diff url <url1> <url2>                 # Compare two pages
 agent-browser diff url <url1> <url2> --wait-until networkidle  # Custom wait strategy
 agent-browser diff url <url1> <url2> --selector "#main"  # Scope to element
+
+### Network
+agent-browser network route <url>              # Intercept requests
+agent-browser network route <url> --abort      # Block requests
+agent-browser network route <url> --body <json>  # Mock response
+agent-browser network unroute [url]            # Remove routes
+agent-browser network requests                 # Open tracked requests
+agent-browser network requests --close         # Close tracked requests
+agent-browser network requests --filter api    # Filter requests
+agent-browser network requests --response request_id --json # Get the response body of a specified request
+
 ```
 
 ## Runtime Streaming
@@ -413,6 +424,67 @@ agent-browser --allow-file-access open file:///path/to/document.pdf
 agent-browser --allow-file-access open file:///path/to/page.html
 agent-browser screenshot output.png
 ```
+
+### Network Request & Response
+
+```bash
+agent-browser connect "ws://cdp-url"
+agent-browser open https://www.example.com
+# Open request monitoring
+agent-browser network requests
+# Operation
+agent-browser snapshot -i
+agent-browser click @e4
+# Obtain the specified requests json
+agent-browser network requests --filter "api/feed" --json > tmp_request.json #or use jq
+# Get the response body of a specified request
+agent-browser network requests --response 33973.11471 --json > tmp_response.json #or use jq
+# Clear requests cache
+agent-browser network requests --clear
+# Close request monitoring
+agent-browser network requests --close
+```
+requests json struct
+```json
+{
+  "success": true,
+  "data": {
+    "requests": [@REQINFO]
+  },
+  "error": null
+}
+```
+@REQINFO
+```json
+{
+    "request_id": 33973.11471,
+    "headers": {
+        ...
+    },
+    "method": "GET",
+    "resourceType": "xhr",
+    "response": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+    },
+    "timestamp": 1773641916654,
+    "url": "https://localhost/api"
+}
+
+response body json struct
+```json
+{
+  "success": true,
+  "data": {
+    "body": "@RESBODY"
+  },
+  "error": null
+}
+```
+
+* The information that needs to be obtained is usually the last @REQINFO
+* Obtain the ***request_id*** from @REQINFO, and then proceed to retrieve the response body
+* When the contentType is application/json, @RESBODY is json string
 
 ### iOS Simulator (Mobile Safari)
 
