@@ -219,9 +219,7 @@ fn build_chrome_args(options: &LaunchOptions) -> Result<ChromeArgs, String> {
 pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
-        None => {
-            find_chrome().ok_or("Chrome not found. use --cdp, or use --executable-path.")?
-        }
+        None => Err("Connect not found. use --cdp, or use --executable-path.")?,
     };
 
     let max_attempts = 3;
@@ -433,75 +431,6 @@ fn chrome_launch_error(message: &str, stderr_lines: &[String]) -> String {
 }
 
 pub fn find_chrome() -> Option<PathBuf> {
-    // 1. Check Chrome downloaded by `agent-browser install`
-    if let Some(p) = crate::install::find_installed_chrome() {
-        return Some(p);
-    }
-
-    // 2. Check system-installed Chrome
-    #[cfg(target_os = "macos")]
-    {
-        let candidates = [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium",
-            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-        ];
-        for c in &candidates {
-            let p = PathBuf::from(c);
-            if p.exists() {
-                return Some(p);
-            }
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let candidates = [
-            "google-chrome",
-            "google-chrome-stable",
-            "chromium-browser",
-            "chromium",
-            "brave-browser",
-            "brave-browser-stable",
-        ];
-        for name in &candidates {
-            if let Ok(output) = Command::new("which").arg(name).output() {
-                if output.status.success() {
-                    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !path.is_empty() {
-                        return Some(PathBuf::from(path));
-                    }
-                }
-            }
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let candidates = [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        ];
-        if let Ok(local) = std::env::var("LOCALAPPDATA") {
-            let chrome = PathBuf::from(&local).join(r"Google\Chrome\Application\chrome.exe");
-            if chrome.exists() {
-                return Some(chrome);
-            }
-            let brave =
-                PathBuf::from(&local).join(r"BraveSoftware\Brave-Browser\Application\brave.exe");
-            if brave.exists() {
-                return Some(brave);
-            }
-        }
-        for c in &candidates {
-            let p = PathBuf::from(c);
-            if p.exists() {
-                return Some(p);
-            }
-        }
-    }
-
     None
 }
 
@@ -694,7 +623,6 @@ fn expand_tilde(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::EnvGuard;
 
     #[cfg(unix)]
     fn spawn_noop_child() -> Child {
@@ -779,28 +707,6 @@ mod tests {
         let lines = vec!["info line".to_string(), "another info line".to_string()];
         let msg = chrome_launch_error("Chrome exited", &lines);
         assert!(msg.contains("last 2 lines"));
-    }
-
-    #[test]
-    fn test_find_playwright_chromium_nonexistent() {
-        let guard = EnvGuard::new(&["PLAYWRIGHT_BROWSERS_PATH", "HOME", "USERPROFILE"]);
-        guard.set("PLAYWRIGHT_BROWSERS_PATH", "/nonexistent/path");
-
-        let temp_home = std::env::temp_dir().join(format!(
-            "agent-browser-test-home-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system clock should be after unix epoch")
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&temp_home).expect("temp home should be created");
-        let temp_home = temp_home.to_string_lossy().to_string();
-        guard.set("HOME", &temp_home);
-        guard.set("USERPROFILE", &temp_home);
-
-        let result = find_playwright_chromium();
-        assert!(result.is_none());
     }
 
     #[test]

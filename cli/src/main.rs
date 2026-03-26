@@ -2,12 +2,10 @@ mod color;
 mod commands;
 mod connection;
 mod flags;
-mod install;
 mod native;
 mod output;
 #[cfg(test)]
 mod test_utils;
-mod upgrade;
 mod validation;
 
 use serde_json::json;
@@ -26,7 +24,6 @@ use flags::{clean_args, parse_flags, Flags};
 use output::{
     print_command_help, print_help, print_response_with_opts, print_version, OutputOptions,
 };
-use upgrade::run_upgrade;
 
 fn serialize_json_value(value: &serde_json::Value) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| {
