@@ -276,6 +276,8 @@ agent-browser tab                     # List tabs
 agent-browser tab new [url]           # New tab (optionally with URL)
 agent-browser tab <n>                 # Switch to tab n
 agent-browser tab close [n]           # Close tab
+agent-browser tab close active        # Close active
+agent-browser tab close all           # Close all
 agent-browser window new              # New window
 ```
 
