@@ -70,8 +70,8 @@ impl CdpClient {
         let ws_tx = Arc::new(Mutex::new(ws_tx));
 
         let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
-        let (event_tx, _) = broadcast::channel(256);
-        let (raw_tx, _) = broadcast::channel(512);
+        let (event_tx, _) = broadcast::channel(1024);
+        let (raw_tx, _) = broadcast::channel(2048);
 
         let pending_clone = pending.clone();
         let event_tx_clone = event_tx.clone();
@@ -128,6 +128,27 @@ impl CdpClient {
                         params: parsed.params.clone().unwrap_or(Value::Null),
                         session_id: parsed.session_id.clone(),
                     };
+                    // Ignore network resource
+                    if event.method == "Network.responseReceived"
+                        || event.method == "Network.requestWillBeSent"
+                        || event.method == "Network.loadingFinished"
+                    {
+                        let resource_type = event
+                            .params
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Other")
+                            .to_string();
+                        match resource_type.as_str() {
+                            "Image" => continue,
+                            "Video" => continue,
+                            "Stylesheet" => continue,
+                            "Font" => continue,
+                            "Ping" => continue,
+                            _ => {}
+                        }
+                    }
+
                     let _ = event_tx_clone.send(event);
                 }
             }

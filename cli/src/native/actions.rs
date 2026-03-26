@@ -127,6 +127,8 @@ pub struct TrackedRequest {
 #[derive(Clone, serde::Serialize)]
 pub struct TrackedResponse {
     pub status: i64,
+    #[serde(rename = "contentSize")]
+    pub content_size: i64,
     #[serde(rename = "contentType")]
     pub content_type: String,
 }
@@ -730,20 +732,29 @@ impl DaemonState {
                                     }
                                 }
                                 if self.request_tracking {
-                                    let resp_headers = response.get("headers").cloned();
-                                    let resp_mime = response
-                                        .get("mimeType")
-                                        .and_then(|v| v.as_str())
-                                        .map(String::from);
+                                    let resp_headers =
+                                        response.get("headers").cloned().unwrap_or(json!({}));
                                     if let Some(entry) = self
                                         .tracked_requests
                                         .iter_mut()
                                         .rev()
                                         .find(|e| e.request_id == request_id)
                                     {
-                                        entry.status = status;
-                                        entry.mime_type = resp_mime;
-                                        entry.response_headers = resp_headers;
+                                        let tracked_response = TrackedResponse {
+                                            status: status.unwrap_or(0),
+                                            content_size: resp_headers
+                                                .get("Content-Length")
+                                                .or(resp_headers.get("content-length"))
+                                                .and_then(|r| r.as_i64())
+                                                .unwrap_or(-1),
+                                            content_type: resp_headers
+                                                .get("Content-Type")
+                                                .or(resp_headers.get("content-type"))
+                                                .and_then(|s| s.as_str())
+                                                .map(String::from)
+                                                .unwrap_or_default(),
+                                        };
+                                        entry.response = Some(tracked_response);
                                     }
                                 }
                             }
@@ -770,33 +781,6 @@ impl DaemonState {
                                 }
                                 if let Some(len) = encoded_data_length {
                                     entry.response_body_size = len;
-                                }
-
-                                let response = event.params.get("response");
-                                let status = response
-                                    .and_then(|r| r.get("status"))
-                                    .and_then(|v| v.as_i64())
-                                    .unwrap_or(0);
-                                let headers = response
-                                    .and_then(|r| r.get("headers"))
-                                    .cloned()
-                                    .unwrap_or(json!({}));
-
-                                if let Some(entry) = self
-                                    .tracked_requests
-                                    .iter_mut()
-                                    .rev()
-                                    .find(|e| e.request_id == request_id)
-                                {
-                                    let tracked_response = TrackedResponse {
-                                        status: status,
-                                        content_type: headers
-                                            .get("content-type")
-                                            .and_then(|s| s.as_str())
-                                            .map(String::from)
-                                            .unwrap_or_default(),
-                                    };
-                                    entry.response = Some(tracked_response);
                                 }
                             }
                         }
