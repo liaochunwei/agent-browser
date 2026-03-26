@@ -1823,6 +1823,8 @@ Subcommands:
     --type <types>           Filter by resource type (comma-separated: xhr,fetch,document)
     --method <method>        Filter by HTTP method (GET, POST, etc.)
     --status <code>          Filter by status (200, 2xx, 400-499)
+    --close                  Cancel capture request
+    --response <request_id>  Get the response body of a specified request
   request <requestId>        View full request/response detail (including body)
   har <start|stop> [path]    Record and export a HAR file
 
@@ -1842,6 +1844,8 @@ Examples:
   agent-browser network request 1234.5
   agent-browser network har start
   agent-browser network har stop ./capture.har
+  agent-browser network requests --close
+  agent-browser network requests --response 3345.1234
 "##
         }
 
@@ -2679,8 +2683,8 @@ Browser Settings:  agent-browser set <setting> [value]
 Network:  agent-browser network <action>
   route <url> [--abort|--body <json>]
   unroute [url]
-  requests [--clear] [--filter <pattern>]
   har <start|stop> [path]
+  requests [--clear|--close|--filter <pattern>|--response <request_id>]
 
 Storage:
   cookies [get|set|clear]    Manage cookies (set supports --url, --domain, --path, --httpOnly, --secure, --sameSite, --expires)

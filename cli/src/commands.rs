@@ -2156,6 +2156,7 @@ fn parse_network(rest: &[&str], id: &str) -> Result<Value, ParseError> {
             Ok(cmd)
         }
         Some("requests") => {
+            let close = rest.contains(&"--close");
             let clear = rest.contains(&"--clear");
             let filter_idx = rest.iter().position(|&s| s == "--filter");
             let filter = filter_idx.and_then(|i| rest.get(i + 1).copied());
@@ -2177,6 +2178,16 @@ fn parse_network(rest: &[&str], id: &str) -> Result<Value, ParseError> {
             }
             if let Some(s) = status {
                 cmd["status"] = json!(s);
+            }
+            let response_idx = rest.iter().position(|&s| s == "--response");
+            let req_id = response_idx.and_then(|i| rest.get(i + 1).copied());
+
+            let mut cmd = json!({ "id": id, "action": "requests", "close": close, "clear": clear });
+            if let Some(f) = filter {
+                cmd["filter"] = json!(f);
+            }
+            if let Some(f) = req_id {
+                cmd["req_id"] = json!(f);
             }
             Ok(cmd)
         }
