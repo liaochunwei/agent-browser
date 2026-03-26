@@ -1000,7 +1000,11 @@ pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError
             Some("list") => Ok(json!({ "id": id, "action": "tab_list" })),
             Some("close") => {
                 let mut cmd = json!({ "id": id, "action": "tab_close" });
-                if let Some(index) = rest.get(1).and_then(|s| s.parse::<i32>().ok()) {
+                if rest.contains(&"all") {
+                    cmd["all"] = json!(true);
+                } else if rest.contains(&"active") {
+                    cmd["active"] = json!(true);
+                } else if let Some(index) = rest.get(1).and_then(|s| s.parse::<i32>().ok()) {
                     cmd["index"] = json!(index);
                 }
                 Ok(cmd)

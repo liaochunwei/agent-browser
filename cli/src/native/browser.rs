@@ -1,5 +1,5 @@
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -747,8 +747,110 @@ impl BrowserManager {
         }
     }
 
-    pub fn tab_list(&self) -> Vec<Value> {
-        self.pages
+    pub async fn tab_list(&mut self) -> Result<Vec<Value>, String> {
+        let result: GetTargetsResult = self
+            .client
+            .send_command_typed("Target.getTargets", &json!({}), None)
+            .await?;
+
+        let page_targets: Vec<TargetInfo> = result
+            .target_infos
+            .into_iter()
+            .filter(|t| {
+                (t.target_type == "page" || t.target_type == "webview")
+                    && !t.url.is_empty()
+                    && !is_internal_chrome_target(&t.url)
+            })
+            .collect();
+
+        if page_targets.is_empty() {
+            self.pages.clear();
+            // Create a new tab
+            let result: CreateTargetResult = self
+                .client
+                .send_command_typed(
+                    "Target.createTarget",
+                    &CreateTargetParams {
+                        url: "about:blank".to_string(),
+                    },
+                    None,
+                )
+                .await?;
+
+            let attach_result: AttachToTargetResult = self
+                .client
+                .send_command_typed(
+                    "Target.attachToTarget",
+                    &AttachToTargetParams {
+                        target_id: result.target_id.clone(),
+                        flatten: true,
+                    },
+                    None,
+                )
+                .await?;
+
+            self.pages.push(PageInfo {
+                target_id: result.target_id,
+                session_id: attach_result.session_id.clone(),
+                url: "about:blank".to_string(),
+                title: String::new(),
+                target_type: "page".to_string(),
+            });
+            self.active_page_index = 0;
+            self.enable_domains(&attach_result.session_id).await?;
+        } else {
+            let mut _pages: HashMap<String, PageInfo> = HashMap::new();
+            while let Some(page) = self.pages.pop() {
+                _pages.insert(page.target_id.clone(), page);
+            }
+            self.pages.clear();
+            for target in &page_targets {
+                if _pages.contains_key(&target.target_id) {
+                    let mut page = _pages.remove(&target.target_id).unwrap();
+                    page.url = target.url.clone();
+                    page.title = target.title.clone();
+                    page.target_type = target.target_type.clone();
+                    self.pages.push(page);
+                } else {
+                    let attach_result: AttachToTargetResult = self
+                        .client
+                        .send_command_typed(
+                            "Target.attachToTarget",
+                            &AttachToTargetParams {
+                                target_id: target.target_id.clone(),
+                                flatten: true,
+                            },
+                            None,
+                        )
+                        .await?;
+                    self.enable_domains(&attach_result.session_id).await?;
+
+                    let info: Result<TargetInfo, _> = self
+                        .client
+                        .send_command_typed(
+                            "Target.getTargetInfo",
+                            &ActivateTargetParams {
+                                target_id: target.target_id.clone(),
+                            },
+                            None,
+                        )
+                        .await;
+                    if let Ok(item) = info {
+                        self.pages.push(PageInfo {
+                            target_id: target.target_id.clone(),
+                            session_id: attach_result.session_id.clone(),
+                            url: item.url.clone(),
+                            title: item.title.clone(),
+                            target_type: item.target_type.clone(),
+                        });
+                    }
+                }
+            }
+            self.update_active_page_if_needed();
+        }
+
+        Ok(self
+            .pages
             .iter()
             .enumerate()
             .map(|(i, p)| {
@@ -760,7 +862,7 @@ impl BrowserManager {
                     "active": i == self.active_page_index,
                 })
             })
-            .collect()
+            .collect())
     }
 
     pub async fn tab_new(&mut self, url: Option<&str>) -> Result<Value, String> {
@@ -833,7 +935,31 @@ impl BrowserManager {
 
         Ok(json!({ "index": index, "url": url, "title": title }))
     }
+    pub async fn tab_close_active(&mut self) -> Result<Value, String> {
+        let index = self.active_page_index;
+        if let Some(_) = self.pages.get_mut(index) {
+            self.pages.remove(index);
+        }
+        self.update_active_page_if_needed();
+        let _ = self.tab_switch(self.active_page_index).await;
+        Ok(json!({ "index": index }))
+    }
+    pub async fn tab_close_all(&mut self) -> Result<Value, String> {
+        while let Some(page) = self.pages.pop() {
+            let _ = self
+                .client
+                .send_command_typed::<_, Value>(
+                    "Target.closeTarget",
+                    &CloseTargetParams {
+                        target_id: page.target_id,
+                    },
+                    None,
+                )
+                .await;
+        }
 
+        Ok(json!({ "closed": true }))
+    }
     pub async fn tab_close(&mut self, index: Option<usize>) -> Result<Value, String> {
         let target_index = index.unwrap_or(self.active_page_index);
 
