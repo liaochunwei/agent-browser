@@ -551,6 +551,7 @@ async fn test_tracked_request_struct() {
         status: Some(200),
         response_headers: None,
         mime_type: Some("text/html".to_string()),
+        response: None,
     };
     let serialized = serde_json::to_value(&tr).unwrap();
     assert_eq!(serialized["url"], "https://example.com/api");
@@ -576,6 +577,7 @@ async fn test_request_tracking_state() {
         status: None,
         response_headers: None,
         mime_type: None,
+        response: None,
     });
     state.tracked_requests.push(super::actions::TrackedRequest {
         url: "https://other.com".to_string(),
@@ -588,6 +590,7 @@ async fn test_request_tracking_state() {
         status: None,
         response_headers: None,
         mime_type: None,
+        response: None,
     });
     assert_eq!(state.tracked_requests.len(), 2);
 

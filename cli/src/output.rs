@@ -1827,6 +1827,8 @@ Subcommands:
     --type <types>           Filter by resource type (comma-separated: xhr,fetch,document)
     --method <method>        Filter by HTTP method (GET, POST, etc.)
     --status <code>          Filter by status (200, 2xx, 400-499)
+    --close                  Cancel capture request
+    --response <request_id>  Get the response body of a specified request
   request <requestId>        View full request/response detail (including body)
   har <start|stop> [path]    Record and export a HAR file
 
@@ -1846,6 +1848,8 @@ Examples:
   agent-browser network request 1234.5
   agent-browser network har start
   agent-browser network har stop ./capture.har
+  agent-browser network requests --close
+  agent-browser network requests --response 3345.1234
 "##
         }
 
@@ -2358,74 +2362,6 @@ Examples:
 "##
         }
 
-        // === Install ===
-        "install" => {
-            r##"
-agent-browser install - Install browser binaries
-
-Usage: agent-browser install [--with-deps]
-
-Downloads and installs browser binaries required for automation.
-
-Options:
-  -d, --with-deps      Also install system dependencies (Linux only)
-
-Examples:
-  agent-browser install
-  agent-browser install --with-deps
-"##
-        }
-
-        // === Upgrade ===
-        "upgrade" => {
-            r##"
-agent-browser upgrade - Upgrade to the latest version
-
-Usage: agent-browser upgrade
-
-Detects the current installation method (npm, Homebrew, or Cargo) and runs
-the appropriate update command. Displays the version change on success, or
-informs you if you are already on the latest version.
-
-Examples:
-  agent-browser upgrade
-"##
-        }
-
-        // === Dashboard ===
-        "dashboard" => {
-            r##"
-agent-browser dashboard - Observability dashboard
-
-Usage: agent-browser dashboard [start|stop|install] [options]
-
-Manage the observability dashboard, a local web UI that shows live
-browser viewports and command activity feeds for all sessions.
-
-Subcommands:
-  start [--port <n>]   Start the dashboard server (default port: 4848)
-  stop                 Stop the dashboard server
-  install              Download and install the dashboard to ~/.agent-browser/dashboard/
-
-Running 'agent-browser dashboard' with no subcommand is equivalent to 'dashboard start'.
-
-The dashboard runs as a standalone background process, independent of
-browser sessions. All sessions automatically stream to the dashboard.
-
-Options:
-  --port <n>           Port for the dashboard server (default: 4848)
-
-Global Options:
-  --json               Output as JSON
-
-Examples:
-  agent-browser dashboard install
-  agent-browser dashboard start
-  agent-browser dashboard start --port 8080
-  agent-browser dashboard stop
-"##
-        }
-
         // === Connect ===
         "connect" => {
             r##"
@@ -2717,15 +2653,15 @@ Browser Settings:  agent-browser set <setting> [value]
 Network:  agent-browser network <action>
   route <url> [--abort|--body <json>]
   unroute [url]
-  requests [--clear] [--filter <pattern>]
   har <start|stop> [path]
+  requests [--clear|--close|--filter <pattern>|--response <request_id>]
 
 Storage:
   cookies [get|set|clear]    Manage cookies (set supports --url, --domain, --path, --httpOnly, --secure, --sameSite, --expires)
   storage <local|session>    Manage web storage
 
 Tabs:
-  tab [new|list|close|<n>]   Manage tabs
+  tab [new|list|close|<n>] [all|active] Manage tabs
 
 Diff:
   diff snapshot              Compare current vs last snapshot
@@ -2766,17 +2702,6 @@ Confirmation:
 Sessions:
   session                    Show current session name
   session list               List active sessions
-
-Dashboard:
-  dashboard [start]          Start the dashboard server (default port: 4848)
-  dashboard start --port <n> Start on a specific port
-  dashboard stop             Stop the dashboard server
-
-Setup:
-  install                    Install browser binaries
-  install --with-deps        Also install system dependencies (Linux)
-  upgrade                    Upgrade to the latest version
-  dashboard install          Install the observability dashboard
 
 Snapshot Options:
   -i, --interactive          Only interactive elements
@@ -2895,7 +2820,6 @@ Install:
   npm install -g agent-browser           # npm
   brew install agent-browser             # Homebrew
   cargo install agent-browser            # Cargo
-  agent-browser install                  # Download Chrome (first time)
 
 Examples:
   agent-browser open example.com

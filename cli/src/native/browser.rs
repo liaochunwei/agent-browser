@@ -802,9 +802,13 @@ impl BrowserManager {
             self.active_page_index = self.pages.len() - 1;
         }
     }
-
-    pub fn tab_list(&self) -> Vec<Value> {
-        self.pages
+    pub async fn tab_refresh(&mut self) -> Result<Vec<Value>, String> {
+        let targets: Vec<String> = self.pages.iter().map(|p| p.target_id.clone()).collect();
+        for target in targets {
+            let _ = self.update_page(&target).await;
+        }
+        Ok(self
+            .pages
             .iter()
             .enumerate()
             .map(|(i, p)| {
@@ -816,7 +820,23 @@ impl BrowserManager {
                     "active": i == self.active_page_index,
                 })
             })
-            .collect()
+            .collect())
+    }
+    pub async fn tab_list(&self) -> Result<Vec<Value>, String> {
+        Ok(self
+            .pages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                json!({
+                    "index": i,
+                    "title": p.title,
+                    "url": p.url,
+                    "type": p.target_type,
+                    "active": i == self.active_page_index,
+                })
+            })
+            .collect())
     }
 
     pub async fn tab_new(&mut self, url: Option<&str>) -> Result<Value, String> {
@@ -889,7 +909,22 @@ impl BrowserManager {
 
         Ok(json!({ "index": index, "url": url, "title": title }))
     }
+    pub async fn tab_close_all(&mut self) -> Result<Value, String> {
+        while let Some(page) = self.pages.pop() {
+            let _ = self
+                .client
+                .send_command_typed::<_, Value>(
+                    "Target.closeTarget",
+                    &CloseTargetParams {
+                        target_id: page.target_id,
+                    },
+                    None,
+                )
+                .await;
+        }
 
+        Ok(json!({ "closed": true }))
+    }
     pub async fn tab_close(&mut self, index: Option<usize>) -> Result<Value, String> {
         let target_index = index.unwrap_or(self.active_page_index);
 
@@ -914,11 +949,8 @@ impl BrowserManager {
             .await;
 
         if self.active_page_index >= self.pages.len() {
-            self.active_page_index = self.pages.len() - 1;
+            let _ = self.tab_switch(self.pages.len() - 1).await;
         }
-
-        let session_id = self.pages[self.active_page_index].session_id.clone();
-        self.enable_domains(&session_id).await?;
 
         Ok(json!({ "closed": target_index, "activeIndex": self.active_page_index }))
     }
@@ -1164,6 +1196,29 @@ impl BrowserManager {
 
     pub fn update_page_target_info(&mut self, target: &TargetInfo) -> bool {
         update_page_target_info_in_pages(&mut self.pages, target)
+    }
+
+    pub async fn update_page(&mut self, target_id: &str) -> Result<(), String> {
+        if let Some(pos) = self.pages.iter().position(|p| p.target_id == target_id) {
+            self.active_page_index = pos;
+            let session_id = self.pages[pos].session_id.clone();
+            self.enable_domains(&session_id).await?;
+
+            // Bring tab to front
+            let _ = self
+                .client
+                .send_command("Page.bringToFront", None, Some(&session_id))
+                .await;
+
+            let url = self.get_url().await.unwrap_or_default();
+            let title = self.get_title().await.unwrap_or_default();
+
+            if let Some(page) = self.pages.get_mut(pos) {
+                page.url = url.clone();
+                page.title = title.clone();
+            }
+        }
+        Ok(())
     }
 
     pub fn remove_page_by_target_id(&mut self, target_id: &str) {

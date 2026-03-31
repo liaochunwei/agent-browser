@@ -122,6 +122,15 @@ pub struct TrackedRequest {
     pub response_headers: Option<Value>,
     #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
+    pub response: Option<TrackedResponse>,
+}
+#[derive(Clone, serde::Serialize)]
+pub struct TrackedResponse {
+    pub status: i64,
+    #[serde(rename = "contentSize")]
+    pub content_size: i64,
+    #[serde(rename = "contentType")]
+    pub content_type: String,
 }
 
 pub struct FetchPausedRequest {
@@ -490,7 +499,8 @@ impl DaemonState {
                 .broadcast_status(connected, sc, vw, vh, &self.engine)
                 .await;
             if let Some(ref mgr) = self.browser {
-                server.broadcast_tabs(&mgr.tab_list()).await;
+                let tabs = mgr.tab_list().await;
+                server.broadcast_tabs(&(tabs.unwrap_or(vec![]))).await;
             } else {
                 server.broadcast_tabs(&[]).await;
             }
@@ -613,6 +623,7 @@ impl DaemonState {
         for te in &drained.changed_targets {
             if let Some(ref mut mgr) = self.browser {
                 mgr.update_page_target_info(&te.target_info);
+                let _ = mgr.update_page(&te.target_info.target_id).await;
             }
         }
     }
@@ -849,12 +860,12 @@ impl DaemonState {
                                         .map(|d| d.as_millis() as u64)
                                         .unwrap_or(0);
                                     self.tracked_requests.push(TrackedRequest {
+                                        request_id,
                                         url,
                                         method,
                                         headers,
                                         timestamp,
                                         resource_type,
-                                        request_id,
                                         post_data: request
                                             .get("postData")
                                             .and_then(|v| v.as_str())
@@ -862,6 +873,7 @@ impl DaemonState {
                                         status: None,
                                         response_headers: None,
                                         mime_type: None,
+                                        response: None,
                                     });
                                 }
                             }
@@ -920,20 +932,29 @@ impl DaemonState {
                                     }
                                 }
                                 if self.request_tracking {
-                                    let resp_headers = response.get("headers").cloned();
-                                    let resp_mime = response
-                                        .get("mimeType")
-                                        .and_then(|v| v.as_str())
-                                        .map(String::from);
+                                    let resp_headers =
+                                        response.get("headers").cloned().unwrap_or(json!({}));
                                     if let Some(entry) = self
                                         .tracked_requests
                                         .iter_mut()
                                         .rev()
                                         .find(|e| e.request_id == request_id)
                                     {
-                                        entry.status = status;
-                                        entry.mime_type = resp_mime;
-                                        entry.response_headers = resp_headers;
+                                        let tracked_response = TrackedResponse {
+                                            status: status.unwrap_or(0),
+                                            content_size: resp_headers
+                                                .get("Content-Length")
+                                                .or(resp_headers.get("content-length"))
+                                                .and_then(|r| r.as_i64())
+                                                .unwrap_or(-1),
+                                            content_type: resp_headers
+                                                .get("Content-Type")
+                                                .or(resp_headers.get("content-type"))
+                                                .and_then(|s| s.as_str())
+                                                .map(String::from)
+                                                .unwrap_or_default(),
+                                        };
+                                        entry.response = Some(tracked_response);
                                     }
                                 }
                             }
@@ -1228,6 +1249,7 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         "recording_restart" => handle_recording_restart(cmd, state).await,
         "pdf" => handle_pdf(cmd, state).await,
         "tab_list" => handle_tab_list(state).await,
+        "tab_refresh" => handle_tab_refresh(state).await,
         "tab_new" => handle_tab_new(cmd, state).await,
         "tab_switch" => handle_tab_switch(cmd, state).await,
         "tab_close" => handle_tab_close(cmd, state).await,
@@ -1359,7 +1381,8 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
         server.broadcast_result(&id, action, success, &data, duration_ms);
 
         if let Some(ref mgr) = state.browser {
-            server.broadcast_tabs(&mgr.tab_list()).await;
+            let tabs = mgr.tab_list().await;
+            server.broadcast_tabs(&(tabs.unwrap_or(vec![]))).await;
 
             // Keep the stream server's CDP session in sync with the active tab
             // so screencasting always targets the correct page.
@@ -2062,6 +2085,8 @@ async fn handle_evaluate(cmd: &Value, state: &DaemonState) -> Result<Value, Stri
 }
 
 async fn handle_close(state: &mut DaemonState) -> Result<Value, String> {
+    state.request_tracking = false;
+
     if let Some(ref mgr) = state.browser {
         if let Some(ref session_name) = state.session_name {
             if let Ok(session_id) = mgr.active_session_id() {
@@ -3375,9 +3400,17 @@ async fn handle_keyboard(cmd: &Value, state: &DaemonState) -> Result<Value, Stri
 // Phase 5 handlers
 // ---------------------------------------------------------------------------
 
-async fn handle_tab_list(state: &DaemonState) -> Result<Value, String> {
-    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
-    let tabs = mgr.tab_list();
+async fn handle_tab_list(state: &mut DaemonState) -> Result<Value, String> {
+    let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+    state.ref_map.clear();
+    let tabs = mgr.tab_list().await?;
+    Ok(json!({ "tabs": tabs }))
+}
+
+async fn handle_tab_refresh(state: &mut DaemonState) -> Result<Value, String> {
+    let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
+    state.ref_map.clear();
+    let tabs = mgr.tab_refresh().await?;
     Ok(json!({ "tabs": tabs }))
 }
 
@@ -3424,14 +3457,24 @@ async fn handle_tab_switch(cmd: &Value, state: &mut DaemonState) -> Result<Value
 
 async fn handle_tab_close(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
     let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
-    let index = cmd
-        .get("index")
-        .and_then(|v| v.as_u64())
-        .map(|i| i as usize);
-    state.ref_map.clear();
-    state.iframe_sessions.clear();
-    state.active_frame_id = None;
-    mgr.tab_close(index).await
+    if cmd.get("all").and_then(|v| v.as_bool()).unwrap_or(false) {
+        state.ref_map.clear();
+        state.iframe_sessions.clear();
+        mgr.tab_close_all().await
+    } else if cmd.get("active").and_then(|v| v.as_bool()).unwrap_or(false) {
+        state.ref_map.clear();
+        state.iframe_sessions.clear();
+        mgr.tab_close(None).await
+    } else {
+        let index = cmd
+            .get("index")
+            .and_then(|v| v.as_u64())
+            .map(|i| i as usize);
+        state.ref_map.clear();
+        state.iframe_sessions.clear();
+        state.active_frame_id = None;
+        mgr.tab_close(index).await
+    }
 }
 
 async fn handle_viewport(cmd: &Value, state: &DaemonState) -> Result<Value, String> {
@@ -5566,11 +5609,9 @@ async fn handle_responsebody(cmd: &Value, state: &DaemonState) -> Result<Value, 
                 if event.method == "Network.responseReceived"
                     && event.session_id.as_deref() == Some(&session_id)
                 {
-                    if let Some(resp_url) = event
-                        .params
-                        .get("response")
-                        .and_then(|r| r.get("url"))
-                        .and_then(|u| u.as_str())
+                    let response = event.params.get("response");
+                    if let Some(resp_url) =
+                        response.and_then(|r| r.get("url")).and_then(|u| u.as_str())
                     {
                         if resp_url.contains(url_pattern) {
                             let request_id = event
@@ -5578,15 +5619,11 @@ async fn handle_responsebody(cmd: &Value, state: &DaemonState) -> Result<Value, 
                                 .get("requestId")
                                 .and_then(|v| v.as_str())
                                 .ok_or("No requestId in response event")?;
-                            let status = event
-                                .params
-                                .get("response")
+                            let status = response
                                 .and_then(|r| r.get("status"))
                                 .and_then(|v| v.as_i64())
                                 .unwrap_or(0);
-                            let headers = event
-                                .params
-                                .get("response")
+                            let headers = response
                                 .and_then(|r| r.get("headers"))
                                 .cloned()
                                 .unwrap_or(json!({}));
@@ -6529,44 +6566,72 @@ async fn handle_requests(cmd: &Value, state: &mut DaemonState) -> Result<Value, 
                     .await;
             }
         }
+        return Ok(json!({ "tracking": true }));
+    } else if cmd.get("close").and_then(|v| v.as_bool()).unwrap_or(false) {
+        state.request_tracking = false;
+        state.tracked_requests.clear();
+        return Ok(json!({ "tracking": false }));
     }
 
-    let filter = cmd.get("filter").and_then(|v| v.as_str());
-    let type_filter = cmd.get("type").and_then(|v| v.as_str());
-    let method_filter = cmd.get("method").and_then(|v| v.as_str());
-    let status_filter = cmd.get("status").and_then(|v| v.as_str());
+    let req_id = cmd.get("req_id").and_then(|v| v.as_str());
+    if let Some(request_id) = req_id {
+        if let Some(ref mgr) = state.browser {
+            if let Ok(session_id) = mgr.active_session_id() {
+                let body_result = mgr
+                    .client
+                    .send_command(
+                        "Network.getResponseBody",
+                        Some(json!({ "requestId": request_id })),
+                        Some(&session_id),
+                    )
+                    .await?;
+                let body = body_result
+                    .get("body")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
 
-    let type_list: Vec<String> = type_filter
-        .map(|t| t.split(',').map(|s| s.trim().to_lowercase()).collect())
-        .unwrap_or_default();
+                return Ok(json!({"body":body}));
+            }
+        }
+        return Ok(json!({"error":"no active session"}));
+    } else {
+        let filter = cmd.get("filter").and_then(|v| v.as_str());
+        let type_filter = cmd.get("type").and_then(|v| v.as_str());
+        let method_filter = cmd.get("method").and_then(|v| v.as_str());
+        let status_filter = cmd.get("status").and_then(|v| v.as_str());
 
-    let requests: Vec<&TrackedRequest> = state
-        .tracked_requests
-        .iter()
-        .filter(|r| {
-            if let Some(f) = filter {
-                if !r.url.contains(f) {
+        let type_list: Vec<String> = type_filter
+            .map(|t| t.split(',').map(|s| s.trim().to_lowercase()).collect())
+            .unwrap_or_default();
+
+        let requests: Vec<&TrackedRequest> = state
+            .tracked_requests
+            .iter()
+            .filter(|r| {
+                if let Some(f) = filter {
+                    if !r.url.contains(f) {
+                        return false;
+                    }
+                }
+                if !type_list.is_empty() && !type_list.contains(&r.resource_type.to_lowercase()) {
                     return false;
                 }
-            }
-            if !type_list.is_empty() && !type_list.contains(&r.resource_type.to_lowercase()) {
-                return false;
-            }
-            if let Some(m) = method_filter {
-                if !r.method.eq_ignore_ascii_case(m) {
-                    return false;
+                if let Some(m) = method_filter {
+                    if !r.method.eq_ignore_ascii_case(m) {
+                        return false;
+                    }
                 }
-            }
-            if let Some(s) = status_filter {
-                if !matches_status_filter(r.status, s) {
-                    return false;
+                if let Some(s) = status_filter {
+                    if !matches_status_filter(r.status, s) {
+                        return false;
+                    }
                 }
-            }
-            true
-        })
-        .collect();
+                true
+            })
+            .collect();
 
-    Ok(json!({ "requests": requests }))
+        Ok(json!({ "requests": requests }))
+    }
 }
 
 async fn handle_request_detail(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {

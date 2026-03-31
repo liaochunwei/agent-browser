@@ -305,7 +305,6 @@ agent-browser is now 100% native Rust. The Node.js/Playwright daemon has been co
 
 ```bash
 npm install -g agent-browser      # 7 MB install
-agent-browser install              # download Chrome
 agent-browser open example.com
 agent-browser snapshot
 ```
@@ -979,7 +978,7 @@ agent-browser get styles "button"
 ```
 
 - **Claude marketplace plugin** - Added `.claude-plugin/marketplace.json` for Claude Code integration
-- **Enhanced network output** - `network requests` now shows method, URL, and resource type
+- **Enhanced network output** - `network requests` now shows method, URL, and resource type, and response status, and response body
 - **`--version` flag** - Display CLI version
 
 ### Bug Fixes

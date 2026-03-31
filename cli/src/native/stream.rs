@@ -16,7 +16,6 @@ use crate::connection::get_port_for_session;
 use crate::connection::get_socket_dir;
 #[cfg(windows)]
 use crate::connection::resolve_port;
-use crate::install::get_dashboard_dir;
 
 /// Frame metadata from CDP Page.screencastFrame events.
 #[derive(Debug, Clone)]
@@ -1486,114 +1485,6 @@ pub async fn ack_screencast_frame(
         )
         .await?;
     Ok(())
-}
-
-/// Standalone dashboard HTTP server (no browser, no WebSocket streaming).
-/// Serves static files and `/api/sessions` for session discovery.
-pub async fn run_dashboard_server(port: u16) {
-    let addr = format!("127.0.0.1:{}", port);
-    let listener = match TcpListener::bind(&addr).await {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("Failed to bind dashboard server on {}: {}", addr, e);
-            return;
-        }
-    };
-
-    let dashboard_dir: Arc<PathBuf> = Arc::from(get_dashboard_dir());
-
-    loop {
-        let Ok((stream, _addr)) = listener.accept().await else {
-            break;
-        };
-        let dash_dir = dashboard_dir.clone();
-        tokio::spawn(async move {
-            handle_dashboard_connection(stream, dash_dir).await;
-        });
-    }
-}
-
-async fn handle_dashboard_connection(
-    mut stream: tokio::net::TcpStream,
-    dashboard_dir: Arc<PathBuf>,
-) {
-    use tokio::io::AsyncReadExt;
-
-    let mut buf = vec![0u8; 8192];
-    let n = match stream.read(&mut buf).await {
-        Ok(n) if n > 0 => n,
-        _ => return,
-    };
-
-    let first_line = std::str::from_utf8(&buf[..n])
-        .unwrap_or("")
-        .lines()
-        .next()
-        .unwrap_or("")
-        .to_string();
-    let method = first_line.split_whitespace().next().unwrap_or("GET");
-    let path = first_line.split_whitespace().nth(1).unwrap_or("/");
-
-    if method == "OPTIONS" {
-        let response = format!(
-            "HTTP/1.1 204 No Content\r\n{CORS_HEADERS}Access-Control-Max-Age: 86400\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-        );
-        let _ = stream.write_all(response.as_bytes()).await;
-        return;
-    }
-
-    if method == "POST" && (path == "/api/sessions" || path == "/api/exec" || path == "/api/kill") {
-        let body_str = read_post_body(&mut stream, &buf, n).await;
-        let result = if path == "/api/exec" {
-            exec_cli(&body_str).await
-        } else if path == "/api/kill" {
-            kill_session(&body_str).await
-        } else {
-            spawn_session(&body_str).await
-        };
-        let (status, resp_body) = match result {
-            Ok(msg) => ("200 OK", msg),
-            Err(e) => (
-                "400 Bad Request",
-                format!(
-                    r#"{{"success":false,"error":{}}}"#,
-                    serde_json::to_string(&e).unwrap_or_else(|_| format!("\"{}\"", e))
-                ),
-            ),
-        };
-        let response = format!(
-            "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
-            resp_body.len()
-        );
-        let _ = stream.write_all(response.as_bytes()).await;
-        let _ = stream.write_all(resp_body.as_bytes()).await;
-        return;
-    }
-
-    let (status, content_type, body): (&str, &str, Vec<u8>) = if path == "/api/sessions" {
-        (
-            "200 OK",
-            "application/json; charset=utf-8",
-            discover_sessions().into_bytes(),
-        )
-    } else if dashboard_dir.join("index.html").exists() {
-        serve_static_file(&dashboard_dir, path)
-    } else {
-        (
-            "200 OK",
-            "text/html; charset=utf-8",
-            DASHBOARD_NOT_INSTALLED_HTML.as_bytes().to_vec(),
-        )
-    };
-
-    let response = format!(
-        "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n{CORS_HEADERS}\r\n",
-        status,
-        content_type,
-        body.len()
-    );
-    let _ = stream.write_all(response.as_bytes()).await;
-    let _ = stream.write_all(&body).await;
 }
 
 /// Read the full POST body from a request. First checks if the body is already

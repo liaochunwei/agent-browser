@@ -1,12 +1,12 @@
 ---
 name: agent-browser
 description: Browser automation CLI for AI agents. Use when the user needs to interact with websites, including navigating pages, filling forms, clicking buttons, taking screenshots, extracting data, testing web apps, or automating any browser task. Triggers include requests to "open a website", "fill out a form", "click a button", "take a screenshot", "scrape data from a page", "test this web app", "login to a site", "automate browser actions", or any task requiring programmatic web interaction.
-allowed-tools: Bash(npx agent-browser:*), Bash(agent-browser:*)
+allowed-tools: Bash(agent-browser:*)
 ---
 
 # Browser Automation with agent-browser
 
-The CLI uses Chrome/Chromium via CDP directly. Install via `npm i -g agent-browser`, `brew install agent-browser`, or `cargo install agent-browser`. Run `agent-browser install` to download Chrome. Existing Chrome, Brave, Playwright, and Puppeteer installations are detected automatically. Run `agent-browser upgrade` to update to the latest version.
+The CLI uses Chrome/Chromium via CDP directly. Install via `npm i -g agent-browser`, `brew install agent-browser`, or `cargo install agent-browser`. 
 
 ## Core Workflow
 
@@ -200,6 +200,17 @@ agent-browser diff screenshot --baseline before.png  # Visual pixel diff
 agent-browser diff url <url1> <url2>                 # Compare two pages
 agent-browser diff url <url1> <url2> --wait-until networkidle  # Custom wait strategy
 agent-browser diff url <url1> <url2> --selector "#main"  # Scope to element
+
+### Network
+agent-browser network route <url>              # Intercept requests
+agent-browser network route <url> --abort      # Block requests
+agent-browser network route <url> --body <json>  # Mock response
+agent-browser network unroute [url]            # Remove routes
+agent-browser network requests                 # Open tracked requests
+agent-browser network requests --close         # Close tracked requests
+agent-browser network requests --filter api    # Filter requests
+agent-browser network requests --response request_id --json # Get the response body of a specified request
+
 ```
 
 ## Streaming
@@ -415,6 +426,55 @@ agent-browser --allow-file-access open file:///path/to/document.pdf
 agent-browser --allow-file-access open file:///path/to/page.html
 agent-browser screenshot output.png
 ```
+
+### Tab(Page) & Windows
+
+```bash
+agent-browser tab                     # List tabs
+agent-browser tab list                # List tabs refresh title
+agent-browser tab new [url]           # New tab (optionally with URL)
+agent-browser tab <n>                 # Switch to tab n
+agent-browser tab close               # Close active tab
+agent-browser tab close [n]           # Close tab
+agent-browser tab close all           # Close all tab
+agent-browser window new              # New window
+```
+
+### Network Request Analysis
+
+Capture API requests and extract structured data from responses.
+
+```bash
+# Open the page and perform actions that trigger API calls
+agent-browser open https://example.com/data
+agent-browser snapshot -i
+agent-browser click @e3  # Triggers API request
+
+# View tracked requests with optional filters
+agent-browser network requests --filter "api"          # Filter by URL pattern
+agent-browser network requests --type xhr,fetch        # Filter by resource type
+agent-browser network requests --method POST            # Filter by HTTP method
+agent-browser network requests --status 2xx             # Filter by status code
+agent-browser network requests --filter "api" --type xhr --json  # Combine filters + JSON output
+
+# Get request details (includes response body)
+agent-browser network request 33973.11471
+
+# Get response body directly
+agent-browser network requests --response 33973.11471 --json
+
+# Clear tracked requests to start fresh
+agent-browser network requests --clear
+
+# Use HAR recording for complex multi-step workflows
+agent-browser network har start
+# ... perform actions ...
+agent-browser network har stop ./capture.har
+```
+
+**Typical workflow**: Navigate -> Trigger API calls -> Filter requests to find request_id -> Get response body -> Extract data with jq.
+
+See [references/network-api.md](references/network-api.md) for detailed workflows, complete output formats, and scripting examples.
 
 ### iOS Simulator (Mobile Safari)
 
@@ -692,6 +752,7 @@ Priority (lowest to highest): `~/.agent-browser/config.json` < `./agent-browser.
 | [references/video-recording.md](references/video-recording.md)       | Recording workflows for debugging and documentation       |
 | [references/profiling.md](references/profiling.md)                   | Chrome DevTools profiling for performance analysis        |
 | [references/proxy-support.md](references/proxy-support.md)           | Proxy configuration, geo-testing, rotating proxies        |
+| [references/network-api.md](references/network-api.md)               | Need to obtain specific data，API interface data          |
 
 ## Browser Engine Selection
 

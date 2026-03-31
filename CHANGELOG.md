@@ -292,11 +292,7 @@
 
 - 25a1526: ### New Features
 
-  - **Brave Browser support** - Added auto-discovery of Brave Browser for CDP connections on macOS, Linux, and Windows. The agent will now automatically detect and connect to Brave alongside Chrome, Chromium, and Canary installations (#817)
-
-  ### Improvements
-
-  - **Postinstall message** - The post-install message now detects existing Chrome installations on the system. If a compatible browser is found, it confirms the path and notes it will be used automatically instead of prompting an install. If no browser is detected, the warning is clearer and mentions that installation can be skipped when using `--cdp`, `--provider`, `--engine`, or `--executable-path` (#815)
+  - **Brave Browser support** - Added auto-discovery of Brave Browser for CDP connections on macOS, Linux, and Windows. The agent will now automatically detect and connect to Brave alongside Chrome, Chromium
 
 ## 0.20.6
 
@@ -321,10 +317,6 @@
 - e2ebde2: ### Bug Fixes
 
   - **Broadcast channel lag handling** - Fixed an issue where **broadcast channel lag** errors were incorrectly treated as stream closure, causing premature termination of event listeners in reload, response body, download, and navigation wait operations. Lagged messages are now skipped and the loop continues instead of breaking (#797)
-
-  ### Improvements
-
-  - Removed unused **pnpm setup** steps from the `global-install` CI job, simplifying the workflow configuration (#798)
 
 ## 0.20.3
 
@@ -375,7 +367,6 @@
   - **18x less memory** -- Daemon memory usage reduced from 143 MB to 8 MB.
   - **1.6x faster cold start** -- Cold start time reduced from 1002ms to 617ms.
   - **Benchmarks** -- Added benchmark suite comparing native vs Node.js daemon performance.
-  - **Chromium installer hardened** -- Fixed zip path traversal vulnerability in Chrome for Testing installer.
 
   ### Bug Fixes
 

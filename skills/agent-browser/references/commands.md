@@ -161,6 +161,10 @@ agent-browser network route <url> --body '{}'  # Mock response
 agent-browser network unroute [url]            # Remove routes
 agent-browser network requests                 # View tracked requests
 agent-browser network requests --filter api    # Filter requests
+agent-browser network requests --filter "api/feed" --json # Obtain the specified requests json
+agent-browser network requests --response 33973.11471 --json # Get the response body of a specified request（requestId）
+agent-browser network requests --clear # Clear requests cache
+agent-browser network requests --close # Close request monitoring
 ```
 
 ## Tabs and Windows

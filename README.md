@@ -10,7 +10,6 @@ Installs the native Rust binary:
 
 ```bash
 npm install -g agent-browser
-agent-browser install  # Download Chrome from Chrome for Testing (first time only)
 ```
 
 ### Project Installation (local dependency)
@@ -19,7 +18,6 @@ For projects that want to pin the version in `package.json`:
 
 ```bash
 npm install agent-browser
-agent-browser install
 ```
 
 Then use via `package.json` scripts or by invoking `agent-browser` directly.
@@ -28,14 +26,12 @@ Then use via `package.json` scripts or by invoking `agent-browser` directly.
 
 ```bash
 brew install agent-browser
-agent-browser install  # Download Chrome from Chrome for Testing (first time only)
 ```
 
 ### Cargo (Rust)
 
 ```bash
 cargo install agent-browser
-agent-browser install  # Download Chrome from Chrome for Testing (first time only)
 ```
 
 ### From Source
@@ -47,15 +43,6 @@ pnpm install
 pnpm build
 pnpm build:native   # Requires Rust (https://rustup.rs)
 pnpm link --global  # Makes agent-browser available globally
-agent-browser install
-```
-
-### Linux Dependencies
-
-On Linux, install system dependencies:
-
-```bash
-agent-browser install --with-deps
 ```
 
 ### Updating
@@ -70,7 +57,6 @@ Detects your installation method (npm, Homebrew, or Cargo) and runs the appropri
 
 ### Requirements
 
-- **Chrome** - Run `agent-browser install` to download Chrome from [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing/) (Google's official automation channel). Existing Chrome, Brave, Playwright, and Puppeteer installations are detected automatically. No Playwright or Node.js required for the daemon.
 - **Rust** - Only needed when building from source (see From Source above).
 
 ## Quick Start
@@ -273,6 +259,7 @@ agent-browser network route <url> --abort      # Block requests
 agent-browser network route <url> --body <json>  # Mock response
 agent-browser network unroute [url]            # Remove routes
 agent-browser network requests                 # View tracked requests
+agent-browser network requests --close         # Close tracked requests
 agent-browser network requests --filter api    # Filter requests
 agent-browser network requests --type xhr,fetch  # Filter by resource type
 agent-browser network requests --method POST   # Filter by HTTP method
@@ -280,15 +267,19 @@ agent-browser network requests --status 2xx    # Filter by status (200, 2xx, 400
 agent-browser network request <requestId>      # View full request/response detail
 agent-browser network har start                # Start HAR recording
 agent-browser network har stop [output.har]    # Stop and save HAR (temp path if omitted)
+agent-browser network requests --response request_id --json # Get the response body of a specified request
 ```
 
 ### Tabs & Windows
 
 ```bash
 agent-browser tab                     # List tabs
+agent-browser tab list                # List tabs refresh title
 agent-browser tab new [url]           # New tab (optionally with URL)
 agent-browser tab <n>                 # Switch to tab n
+agent-browser tab close               # Close active tab
 agent-browser tab close [n]           # Close tab
+agent-browser tab close all           # Close all tab
 agent-browser window new              # New window
 ```
 
@@ -356,14 +347,6 @@ agent-browser state clean --older-than <days>  # Delete old states
 agent-browser back                    # Go back
 agent-browser forward                 # Go forward
 agent-browser reload                  # Reload page
-```
-
-### Setup
-
-```bash
-agent-browser install                 # Download Chrome from Chrome for Testing (Google's official automation channel)
-agent-browser install --with-deps     # Also install system deps (Linux)
-agent-browser upgrade                 # Upgrade agent-browser to the latest version
 ```
 
 ## Authentication
